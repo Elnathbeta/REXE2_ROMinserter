@@ -51,7 +51,33 @@ class Inserter():
         self.ROM.write(file_obj.read())
         # RECHERCHE DE POINTEURS ET REMPLACEMENT
 
+    @staticmethod
+    def decimal_to_little_endian(n):
+        """
+            Conversion d'un nombre positif decimal en suite de valeurs en little endian.
+            chaque element du resultat est la valeur d'un octet.
+            :rtype: list of int
+        """
+        result = []
+        while(n > 0):
+            byte = n % 16
+            n = n // 16
+            byte += (n % 16) * 16
+            n = n // 16
+            result.append(byte)
+        return result
 
+    @staticmethod
+    def little_endian_to_decimal(bytelist):
+        """
+            Interpretation d'une suite de valeurs en tant qu'un seul nombre codé en little endian.
+            Les valeurs sont interpretés avec int(valeur, 0): "0x10", "16", 16 ont la même valeur.
+            :rtype: int
+        """
+        result = 0
+        for power, value in enumerate(bytelist):
+            result += int(str(value), 0) * 256**power
+        return result
 
 
 if __name__ == '__main__':
