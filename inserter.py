@@ -45,7 +45,13 @@ class Inserter():
             :param old_address: Tous les pointeurs pointant ici seront remplacés par des pointeurs pointant sur la nouvelle adresse. VIRTUAL_OFFSET sera ajouté à cette valeur.
             :type old_address: int
         """
-        self.LOGGER.debug("TODO: insert. Params: {}, {}".format(file_obj, old_address))
+        # INSERTION DU NOUVEAU FICHIER
+        self.ROM.seek(self.Insert_offset)
+        self.LOGGER.debug("[{}] Inserting new bytes at {}".format(os.path.basename(file_obj.name), hex(self.Insert_offset)))
+        self.ROM.write(file_obj.read())
+        # RECHERCHE DE POINTEURS ET REMPLACEMENT
+
+
 
 
 if __name__ == '__main__':
