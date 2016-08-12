@@ -60,9 +60,11 @@ class Inserter():
         # RECHERCHE DE POINTEURS ET REMPLACEMENT
         self.ROM.seek(0)
         byte_sequence = [ord(self.ROM.read(1)) for _ in range(self.POINTER_SIZE)] #On initialise en lisant les premiers octets qui pourraient composer un pointeur
+        replacement_list = [] # Juste pour info, on affichera où on fait des remplacements
         while True:
             if self.little_endian_to_decimal(byte_sequence) == (old_address + self.VIRTUAL_OFFSET):
                 self.LOGGER.debug("[{}] Old pointer found at {}".format(os.path.basename(file_obj.name), hex(self.ROM.tell() - self.POINTER_SIZE)))
+                replacement_list.append(self.ROM.tell())
                 self.ROM.seek(-self.POINTER_SIZE, io.SEEK_CUR)
                 self.ROM.write(new_pointer.to_bytes(self.POINTER_SIZE, "little")) # On écrit les octets en little endian
             b = self.ROM.read(1)
@@ -70,6 +72,7 @@ class Inserter():
                 break
             byte_sequence.pop(0)
             byte_sequence.append(ord(b))
+        self.LOGGER.info("[{}] {} pointers replaced. {}".format(os.path.basename(file_obj.name), len(replacement_list), ', '.join([hex(x) for x in replacement_list])))
 
     @staticmethod
     def decimal_to_little_endian(n):
