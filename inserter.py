@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 import sys
+import io
 import logmodule
 
 ROM_FILENAME = os.path.abspath(os.path.join(os.path.dirname(__file__), "ROM.bin")) # Le fichier de la ROM
@@ -47,9 +48,28 @@ class Inserter():
         """
         # INSERTION DU NOUVEAU FICHIER
         self.ROM.seek(self.Insert_offset)
-        self.LOGGER.debug("[{}] Inserting new bytes at {}".format(os.path.basename(file_obj.name), hex(self.Insert_offset)))
+        self.LOGGER.info("[{}] Inserting new bytes at {}".format(os.path.basename(file_obj.name), hex(self.Insert_offset)))
         self.ROM.write(file_obj.read())
+        # CALCUL DES POINTEURS ET MISE À JOUR DE Insert_offset
+        new_pointer = self.Insert_offset + self.VIRTUAL_OFFSET
+        self.LOGGER.debug("[{}] Pointer to new text: {}".format(os.path.basename(file_obj.name), hex(new_pointer)))
+        while self.ROM.tell() % 4: #Le texte suivant doit commencer forcément à un multiple de 4
+            self.ROM.write(b'\x00')
+        self.Insert_offset = self.ROM.tell()
+        self.LOGGER.debug("[{}] Next text will start at {}".format(os.path.basename(file_obj.name), hex(self.Insert_offset)))
         # RECHERCHE DE POINTEURS ET REMPLACEMENT
+        self.ROM.seek(0)
+        byte_sequence = [ord(self.ROM.read(1)) for _ in range(self.POINTER_SIZE)] #On initialise en lisant les premiers octets qui pourraient composer un pointeur
+        while True:
+            if self.little_endian_to_decimal(byte_sequence) == (old_address + self.VIRTUAL_OFFSET):
+                self.LOGGER.debug("[{}] Old pointer found at {}".format(os.path.basename(file_obj.name), hex(self.ROM.tell() - self.POINTER_SIZE)))
+                self.ROM.seek(-self.POINTER_SIZE, io.SEEK_CUR)
+                self.ROM.write(new_pointer.to_bytes(self.POINTER_SIZE, "little")) # On écrit les octets en little endian
+            b = self.ROM.read(1)
+            if b == b'':
+                break
+            byte_sequence.pop(0)
+            byte_sequence.append(ord(b))
 
     @staticmethod
     def decimal_to_little_endian(n):
@@ -96,3 +116,4 @@ if __name__ == '__main__':
                 with open(filepath, "rb") as f:
                     inserter.insert(f, old_address)
                 MainLogger.info("{} inserted".format(entry))
+    MainLogger.info("All files inserted.")
