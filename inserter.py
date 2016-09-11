@@ -37,10 +37,13 @@ class Inserter():
         self.VIRTUAL_OFFSET = virtual_offset
         self.POINTER_SIZE = pointer_size
         self.LOGGER = logger
+        self.pointers_find_replace = [] #Liste qui contient des tuples qui representent les pointeurs à remplacer: (vieux_pointeur, nouveau_pointeur)
 
     def insert(self, file_obj, old_address):
         """
             Ajoute un fichier à Insert_offset.
+            Cette fonction ne remplace pas les occurrences des pointeurs vers le vieux texte par des pointeurs vers le nouveau texte. Pour ce faire, il faut appeler la fonction self.replace_pointers.
+
             :param file_obj: le fichier à ajouter
             :type file_obj: file object (open in binary mode)
             :param old_address: Tous les pointeurs pointant ici seront remplacés par des pointeurs pointant sur la nouvelle adresse. VIRTUAL_OFFSET sera ajouté à cette valeur.
@@ -50,29 +53,38 @@ class Inserter():
         self.ROM.seek(self.Insert_offset)
         self.LOGGER.info("[{}] Inserting new bytes at {}".format(os.path.basename(file_obj.name), hex(self.Insert_offset)))
         self.ROM.write(file_obj.read())
-        # CALCUL DES POINTEURS ET MISE À JOUR DE Insert_offset
-        new_pointer = self.Insert_offset + self.VIRTUAL_OFFSET
-        self.LOGGER.debug("[{}] Pointer to new text: {}".format(os.path.basename(file_obj.name), hex(new_pointer)))
+        # REMPLACEMENT DES POINTEURS
+        self.pointers_find_replace.append((old_address + VIRTUAL_OFFSET, self.Insert_offset + VIRTUAL_OFFSET)) #Toutes les occurrences de la vieille adresse seront remplacées par la nouvelle. Ceci sera fait lors de l'appel à self.replace_pointers
+        self.LOGGER.debug("[{}] Pointer to new text: {}".format(os.path.basename(file_obj.name), hex(self.Insert_offset + VIRTUAL_OFFSET)))
+        # MISE À JOUR DE Insert_offset
         while self.ROM.tell() % 4: #Le texte suivant doit commencer forcément à un multiple de 4
             self.ROM.write(b'\x00')
         self.Insert_offset = self.ROM.tell()
         self.LOGGER.debug("[{}] Next text will start at {}".format(os.path.basename(file_obj.name), hex(self.Insert_offset)))
-        # RECHERCHE DE POINTEURS ET REMPLACEMENT
-        self.ROM.seek(0)
+
+    def replace_pointers(self):
+        """
+            Fait le remplacement de tous les vieux pointeurs vers les vieux textes par des nouveaux pointeurs vers les nouveaux textes
+        """
+        self.LOGGER.info("Starting pointer replacement...")
+        self.ROM.seek(0) #On se positionne au début de la rom
         byte_sequence = [ord(self.ROM.read(1)) for _ in range(self.POINTER_SIZE)] #On initialise en lisant les premiers octets qui pourraient composer un pointeur
-        replacement_list = [] # Juste pour info, on affichera où on fait des remplacements
         while True:
-            if self.little_endian_to_decimal(byte_sequence) == (old_address + self.VIRTUAL_OFFSET):
-                self.LOGGER.debug("[{}] Old pointer found at {}".format(os.path.basename(file_obj.name), hex(self.ROM.tell() - self.POINTER_SIZE)))
-                replacement_list.append(self.ROM.tell())
-                self.ROM.seek(-self.POINTER_SIZE, io.SEEK_CUR)
-                self.ROM.write(new_pointer.to_bytes(self.POINTER_SIZE, "little")) # On écrit les octets en little endian
-            b = self.ROM.read(1)
-            if b == b'':
+            byte_sequence_decimal = self.little_endian_to_decimal(byte_sequence)
+            #On cherche si la valeur actuelle est une valeur à remplacer
+            for search, replace in self.pointers_find_replace:
+                if search == byte_sequence_decimal:
+                    self.LOGGER.debug("Replacing pointer {} with {} at {}".format(hex(search), hex(replace), hex(self.ROM.tell() - self.POINTER_SIZE)))
+                    self.ROM.seek(-self.POINTER_SIZE, io.SEEK_CUR) #On se repositionne au début du pointeur
+                    self.ROM.write(replace.to_bytes(self.POINTER_SIZE, "little")) #On écrit les nouveaux octets en little endian
+                    break #Pas besoin de chercher encore
+            c = self.ROM.read(1)
+            if c == b'': #Si on est à la fin du fichier
                 break
+            #On se deplace d'un octet en avant
             byte_sequence.pop(0)
-            byte_sequence.append(ord(b))
-        self.LOGGER.info("[{}] {} pointers replaced. {}".format(os.path.basename(file_obj.name), len(replacement_list), ', '.join([hex(x) for x in replacement_list])))
+            byte_sequence.append(ord(c))
+        self.LOGGER.info("Pointer replacement done.")
 
     @staticmethod
     def decimal_to_little_endian(n):
@@ -119,4 +131,5 @@ if __name__ == '__main__':
                 with open(filepath, "rb") as f:
                     inserter.insert(f, old_address)
                 MainLogger.info("{} inserted".format(entry))
+        inserter.replace_pointers() #On remplace tous les pointeurs: ça permet de ne parcourir la ROM qu'une fois.
     MainLogger.info("All files inserted.")
