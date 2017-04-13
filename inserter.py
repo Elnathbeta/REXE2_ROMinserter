@@ -68,9 +68,12 @@ class Inserter():
         """
         self.LOGGER.info("Starting pointer replacement...")
         self.ROM.seek(0) #On se positionne au début de la rom
-        byte_sequence = [ord(self.ROM.read(1)) for _ in range(self.POINTER_SIZE)] #On initialise en lisant les premiers octets qui pourraient composer un pointeur
         while True:
-            byte_sequence_decimal = self.little_endian_to_decimal(byte_sequence)
+            byte_sequence = [self.ROM.read(1) for _ in range(self.POINTER_SIZE)] # On lit la taille d'un pointeur
+            if b'' in byte_sequence: # Si parmi les caractères qu'on a lu il y a un caractère vide c'est qu'il y a pas assez de caractères restants dans le fichier.
+                self.LOGGER.debug("Empty char read: end of ROM reached")
+                break
+            byte_sequence_decimal = self.little_endian_to_decimal([ord(c) for c in byte_sequence])
             #On cherche si la valeur actuelle est une valeur à remplacer
             for search, replace in self.pointers_find_replace:
                 if search == byte_sequence_decimal:
@@ -78,12 +81,6 @@ class Inserter():
                     self.ROM.seek(-self.POINTER_SIZE, io.SEEK_CUR) #On se repositionne au début du pointeur
                     self.ROM.write(replace.to_bytes(self.POINTER_SIZE, "little")) #On écrit les nouveaux octets en little endian
                     break #Pas besoin de chercher encore
-            c = self.ROM.read(1)
-            if c == b'': #Si on est à la fin du fichier
-                break
-            #On se deplace d'un octet en avant
-            byte_sequence.pop(0)
-            byte_sequence.append(ord(c))
         self.LOGGER.info("Pointer replacement done.")
 
     @staticmethod
